@@ -4,6 +4,12 @@ class Config:
     # Paths
     DATA_DIR = "./data/NER_data"
     
+    # Twitter-15 Labels
+    LABELS = ["O", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG", "B-OTHER", "I-OTHER"]
+    LABEL2ID = {label: i for i, label in enumerate(LABELS)}
+    ID2LABEL = {i: label for i, label in enumerate(LABELS)}
+    NUM_LABELS = len(LABELS)
+    
     # Hyperparameters (from Spec)
     MAX_SEQ_LEN = 128      # N
     HIDDEN_DIM = 768       # D

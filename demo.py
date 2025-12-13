@@ -38,6 +38,13 @@ def demo():
     print(f" - Input IDs: {input_ids.shape} (Expected: [B, N])")
     print(f" - Attention Mask: {attention_mask.shape} (Expected: [B, N])")
     print(f" - Patches: {patches.shape} (Expected: [B, P, D_patch])")
+
+    # Check for Augmentation
+    mask_token_id = dataset.tokenizer.mask_token_id
+    masked_count = (input_ids == mask_token_id).sum().item()
+    print(f" - Augmented (Masked) Tokens found: {masked_count} (Should be > 0 usually)")
+    zeroed_patches = (patches == 0).all(dim=2).sum().item()
+    print(f" - Augmented (Dropped) Patches found: {zeroed_patches} (Should be > 0 usually)")
     
     # 5. Forward Pass (Module 1.3)
     t_emb, v_emb = model(input_ids, patches)
