@@ -1,0 +1,171 @@
+\documentclass[12pt]{article}
+%\title{Package Test: algorithm/algorithmic}
+
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{amsmath}
+
+\begin{document}
+\begin{algorithm}
+\caption{Multimodal Preprocessing for FRCL-GDT}
+\label{alg:preprocessing}
+\begin{algorithmic}[1]
+\REQUIRE Raw Text String $S$, Raw Image File $I$, Max Length $N$, Patch Count $P$, Hidden Dim $D$
+\ENSURE Text Embeddings $\mathbf{T_{Emb}}$ [N $\times$ D], Visual Embeddings $\mathbf{V_{Emb}}$ [P $\times$ D], Attention Mask $\mathbf{M}_{Attn}$ [N]
+\vspace{0.5cm}
+
+\STATE $S_{clean} \leftarrow \text{Clean}(S) \quad \triangleright$ Remove URLs, mentions, lowercase
+\STATE $S_{tokens} \leftarrow \text{TokenizeBPE}(S_{clean})$
+\STATE $S_{final} \leftarrow [\text{[CLS]}, S_{tokens}, \text{[SEP]}]$
+\STATE $T_{IDs} \leftarrow \text{ConvertToIDs}(S_{final})$
+\STATE $T_{Padded} \leftarrow \text{PadTruncate}(T_{IDs}, N)$
+\STATE $\mathbf{M}_{Attn} \leftarrow \text{GenerateAttentionMask}(T_{Padded})$
+
+\STATE $I_{norm} \leftarrow \text{ResizeNormalize}(I, 224 \times 224)$
+\STATE $V_{patches} \leftarrow \text{DivideIntoPatches}(I_{norm}, P)$
+\STATE $V_{raw} \leftarrow \text{FlattenPatches}(V_{patches}) \quad \triangleright V_{raw}$ has shape $[\text{P} \times D_{patch}]$
+
+\STATE $\mathbf{T_{proj}} \leftarrow \text{LookupEmbedding}(T_{Padded}) \quad \triangleright$ Shape [N $\times$ D]
+\STATE $\mathbf{V_{proj}} \leftarrow \text{LinearProjection}(V_{raw}) \quad \triangleright$ Shape [P $\times$ D]
+
+\STATE $\mathbf{T_{PE}} \leftarrow \text{LearnedPositionalEncoding}(\text{Text})$
+\STATE $\mathbf{V_{PE}} \leftarrow \text{LearnedPositionalEncoding}(\text{Vision})$
+
+\STATE $\mathbf{T_{Emb}} \leftarrow \mathbf{T_{proj}} + \mathbf{T_{PE}}$
+\STATE $\mathbf{V_{Emb}} \leftarrow \mathbf{V_{proj}} + \mathbf{V_{PE}}$
+
+\RETURN $\mathbf{T_{Emb}}, \mathbf{V_{Emb}}, \mathbf{M}_{Attn}$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\begin{algorithm}
+\caption{FRCL Encoder and Alignment Engine}
+\label{alg:module2}
+\begin{algorithmic}[1]
+\REQUIRE $\mathbf{T_{Emb}}$ [N $\times$ D], $\mathbf{V_{Emb}}$ [P $\times$ D], $\mathbf{M}_{Attn}$ [N] (from Module I)
+\REQUIRE Top-K hyperparameter $K$, Temperature $\tau$, Loss Weight $\lambda_1$
+\ENSURE $\mathbf{H_{T}^{out}}$ [N $\times$ D], $\mathbf{H_{V}^{ranked}}$ [N $\times$ D], $\mathcal{L}_{FRCL}$
+\vspace{0.5cm}
+
+\STATE $\mathbf{H_T} \leftarrow \text{BERT\_EncoderStack}(\mathbf{T_{Emb}}, \mathbf{M}_{Attn})
+\STATE $\mathbf{H_V} \leftarrow \text{ViT\_EncoderStack}(\mathbf{V_{Emb}})
+\STATE $\mathbf{S_T}$ \leftarrow \mathbf{H_T} \cdot \mathbf{H_V}^\top \quad \triangleright$ Token-Patch Similarity Matrix [N $\times$ P]
+\FOR{$i = 1$ to $N$}
+    \STATE $S_{row} \leftarrow \mathbf{S_T}[i, \cdot]$
+    \STATE $M_i^+ \leftarrow \text{TopK\_Indices}(S_{row}, K)
+    \STATE $M_i^- \leftarrow \text{NegativeSampleIndices}(S_{row}, M_i^+) 
+\ENDFOR
+
+\STATE $\mathcal{L}_{FRCL} \leftarrow 0$
+\FOR{$i = 1$ to $N$}
+    \STATE $\mathcal{N}_i \leftarrow \sum_{j \in M_i^+} \exp(\mathbf{h}_{T_i} \cdot \mathbf{h}_{V_j} / \tau)$
+    \STATE $\mathcal{D}_i \leftarrow \sum_{j' \in M_i^+ \cup M_i^-} \exp(\mathbf{h}_{T_i} \cdot \mathbf{h}_{V_{j'}} / \tau)$
+    \STATE $\mathcal{L}_{FRCL} \leftarrow \mathcal{L}_{FRCL} - \log(\mathcal{N}_i / \mathcal{D}_i)$
+\ENDFOR
+\STATE $\mathcal{L}_{FRCL} \leftarrow \mathcal{L}_{FRCL} / N \quad \triangleright$ Average loss over all N tokens
+
+\STATE $\mathbf{H_{V}^{ranked}} \leftarrow \text{TensorZeroes}(N, D)$
+\FOR{$i = 1$ to $N$}
+    \STATE $\mathbf{H_{V}^{ranked}}[i] \leftarrow \text{AggregateMean}(\{\mathbf{H_V}[j] \mid j \in M_i^+\})
+\ENDFOR
+
+\STATE $\mathbf{H_{T}^{out}} \leftarrow \mathbf{H_T}$
+\STATE \textbf{return} $\mathbf{H_{T}^{out}}, \mathbf{H_{V}^{ranked}}, \mathcal{L}_{FRCL}$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\begin{algorithm}
+\caption{Smart Modality Gating Fusion}
+\label{alg:module3}
+\begin{algorithmic}[1]
+\REQUIRE $\mathbf{H_{T}^{out}}$ [N $\times$ D] (Contextual Text Features)
+\REQUIRE $\mathbf{H_{V}^{ranked}}$ [N $\times$ D] (Ranked Visual Features, aligned to N tokens)
+\ENSURE $\mathbf{H_{fused}}$ [N $\times$ D] (Final Multimodal Feature Sequence)
+
+\vspace{0.5cm}
+\STATE $\mathbf{H}_{concat} \leftarrow \text{Concatenate}(\mathbf{H_{T}^{out}}, \mathbf{H_{V}^{ranked}}) \quad \triangleright$ Sequence of vectors [N $\times$ 2D]
+\STATE $\mathbf{G}_{logits} \leftarrow \text{MLP}(\mathbf{H}_{concat}) 
+\STATE $\mathbf{\alpha} \leftarrow \text{Sigmoid}(\mathbf{G}_{logits}) \quad \triangleright$ Generate Gating Scores [N $\times$ 1], where $\alpha_i \in [0, 1]$
+
+\STATE $\mathbf{H_{gated}} \leftarrow \mathbf{H_{V}^{ranked}} \otimes \mathbf{\alpha} \quad \triangleright$ \COMMENT{Visual Feature Suppression, when $\alpha_i \approx 0$, visual feature $\mathbf{h}_{V_i}$ is suppressed, filtering noise.}
+% \STATE \hspace{1cm} \COMMENT{
+
+\STATE $\mathbf{H_{fused}} \leftarrow \mathbf{H_{T}^{out}} + \mathbf{H_{gated}}
+\STATE \textbf{return} $\mathbf{H_{fused}}$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+\begin{algorithm}
+\caption{Module IV-A: Grid Feature Construction and Classification}
+\label{alg:module4a}
+\begin{algorithmic}[1]
+\REQUIRE $\mathbf{H_{fused}}$ [N $\times$ D] 
+\REQUIRE Relation Tag Set $R$ 
+\ENSURE Prediction Grid $\mathbf{P}_{tags}$ [N $\times$ N] 
+
+\vspace{0.5cm}
+\STATE $N \leftarrow \text{Length}(\mathbf{H_{fused}})$
+\STATE $\mathbf{V}_{grid} \leftarrow \text{Empty\_Tensor}(N, N, \text{3D})$
+
+\FOR{$i = 1$ to $N$}
+    \FOR{$j = i$ to $N$}
+        \STATE $\mathbf{h}_i \leftarrow \mathbf{H_{fused}}[i]$
+        \STATE $\mathbf{h}_j \leftarrow \mathbf{H_{fused}}[j]$
+        \STATE $\mathbf{h}_{i \cdot j} \leftarrow \mathbf{h}_i \otimes \mathbf{h}_j$ \COMMENT{Hadamard product interaction term}
+        \STATE $\mathbf{V}_{grid}[i, j] \leftarrow \text{Concatenate}(\mathbf{h}_i, \mathbf{h}_j, \mathbf{h}_{i \cdot j})$
+    \ENDFOR
+\ENDFOR
+
+\STATE $\mathbf{P} \leftarrow \text{MLPClassifier}(\mathbf{V}_{grid}) \quad \triangleright$ Output scores for all tags in $R$
+\STATE $\mathbf{P}_{tags} \leftarrow \text{Argmax}(\mathbf{P})$ \COMMENT{Select the highest-scoring tag for each span $(i, j)$}
+
+\STATE \textbf{return} $\mathbf{P}, \mathbf{P}_{tags}$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\begin{algorithm}
+\caption{Module IV-B: Constrained DP Decoding}
+\label{alg:module4b}
+\begin{algorithmic}[1]
+\REQUIRE $\mathbf{P}$ [N $\times$ N $\times$ $|R|$] 
+\REQUIRE $\mathbf{P}_{tags}$ [N $\times$ N] 
+\ENSURE Final Predicted Entity Spans $\mathcal{E}$
+
+\vspace{0.5cm}
+\STATE $N \leftarrow \text{Length}(\mathbf{P}_{tags})$
+\STATE $\mathcal{E} \leftarrow \emptyset$ 
+\STATE $\mathcal{DP} \leftarrow \text{Initialize\_Scoring\_Table}(N)$ \COMMENT{DP table for optimal path scores}
+
+\FOR{$j = 1$ to $N$}
+    \FOR{$i = 1$ to $j$}
+        \STATE $\text{current\_score} \leftarrow \text{Score}(\mathbf{P}[i, j], \mathbf{P}_{tags}[i, j])$
+
+        \IF{$\mathbf{P}_{tags}[i, j] \in \{\text{Start, Single, Middle, End}\}$}
+            \STATE $\mathcal{DP}[i, j] \leftarrow \text{Max}(\mathcal{DP}[i, j], \text{current\_score})$
+        \ENDIF
+
+        \IF{$\mathbf{P}_{tags}[i, j] = \text{TH}$}
+            \FOR{$i' = 1$ to $i-1$}
+                \STATE $\mathcal{DP}[i', j] \leftarrow \text{Max}(\mathcal{DP}[i', j], \mathcal{DP}[i', i-1] + \text{current\_score})$
+                \COMMENT{DP update for discontinuous span using TH link}
+            \ENDFOR
+        \ENDIF
+    \ENDFOR
+\ENDFOR
+
+\STATE $\mathcal{E} \leftarrow \text{ExtractOptimalPaths}(\mathcal{DP}, \mathbf{P}_{tags})$ \COMMENT{Trace back paths for final spans and labels}
+\STATE \textbf{return} $\mathcal{E}$
+\end{algorithmic}
+\end{algorithm}
+\end{document}

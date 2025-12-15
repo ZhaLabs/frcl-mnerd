@@ -1,0 +1,215 @@
+\documentclass[runningheads]{llncs}
+
+% ========================
+% ENCODING & FONT (FIXES ? ISSUE)
+% ========================
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{float}
+
+
+% ========================
+% BASIC PACKAGES
+% ========================
+\usepackage{graphicx}
+\usepackage{amsmath}
+\setcounter{secnumdepth}{3}
+
+\begin{document}
+
+
+% ========================
+% TITLE & AUTHORS
+% ========================
+\title{Image Tampering Detection and Localization Using Deep Learning Techniques}
+\titlerunning{Image Tampering Detection and Localization}
+
+\author{Jothi Sri S\orcidID{2022103049} \and Keerthika B\orcidID{2022103552} \and Naliniksha P\orcidID{2022103553} \and Punitha K\orcidID{2022103561}}
+
+
+\institute{Department of Computer Science and Engineering\\
+Anna University, Chennai}
+
+\maketitle
+
+% ========================
+% ABSTRACT
+% ========================
+\begin{abstract} The rapid evolution of digital image editing tools has made image manipulation increasingly realistic and difficult to detect, posing serious threats to media authenticity, digital forensics, and public trust. Manipulation techniques such as splicing, copy--move forgery, and content removal often blend seamlessly into original images, making traditional forensic cues ineffective. One of the most critical challenges in image tampering localization is the accurate identification of tampered boundaries, as natural object edges are frequently misclassified as manipulation artifacts. This paper presents a boundary-guided deep learning framework for image tampering detection and localization. The proposed system employs a ResNet-50 encoder to extract multi-scale feature representations and a boundary-aware decoder to emphasize manipulation-related edge information. To explicitly distinguish tampered boundaries from natural object edges, a dual-branch boundary refinement module is introduced. In addition, a boundary-guided contrastive learning strategy is utilized to enhance feature discrimination near manipulated regions. To complement pixel-level localization, an image-level adaptation module is incorporated to classify images as authentic or manipulated. Experimental evaluation on benchmark datasets demonstrates improved boundary precision, localization accuracy, and robustness, indicating the effectiveness of the proposed framework for real-world image forensic applications. \keywords{Image Tampering Detection, Boundary-Aware Learning, Contrastive Learning, Digital Image Forensics} \end{abstract}
+
+% ========================
+% INTRODUCTION
+% ========================
+
+\section{Introduction}
+
+Digital images are extensively used in journalism, social media, legal documentation, and surveillance systems. With the rapid advancement of image editing tools, manipulation techniques such as splicing, copy--move forgery, and content removal have become increasingly easy to perform and difficult to detect. Manipulated regions often blend seamlessly with surrounding content, making visual inspection unreliable and increasing the risk of misinformation and digital fraud \cite{wu2019mantra,chen2021multi,hsu2006columbia,dong2013casia}.
+
+Early image tampering detection approaches relied on handcrafted forensic features derived from noise patterns, compression artifacts, or intrinsic image statistics \cite{hsu2006columbia}. Although these methods are effective in controlled settings, they are highly sensitive to post-processing operations and fail under subtle or complex manipulations \cite{dong2013casia,wen2016coverage}. Recent deep learning-based methods have significantly improved detection accuracy by learning manipulation-aware representations directly from data \cite{wu2019mantra,chen2021multi}. However, accurate localization of tampered regions remains challenging, particularly near manipulation boundaries, where natural object edges are frequently confused with forged boundaries \cite{chen2021multi,hao2024ecnet}.
+
+\subsection{Limitations in Current Systems}
+
+Despite notable progress, several limitations persist in existing image tampering detection systems. Many approaches focus primarily on pixel-level classification and lack explicit mechanisms to distinguish tampered boundaries from natural object edges, resulting in boundary confusion and false positive predictions \cite{wu2019mantra,hao2024ecnet}. Multi-scale and multi-view supervision strategies improve robustness but still struggle with subtle or low-contrast manipulations \cite{chen2021multi}. In addition, contrastive learning-based approaches enhance feature discrimination for forgery localization but often provide limited image-level authenticity assessment, restricting their applicability in real-world forensic scenarios \cite{niloy2023cfl,chen2020simclr}.
+
+\subsection{Proposed Approach}
+
+To address these limitations, this work proposes a boundary-guided deep learning framework for image tampering detection and localization. The proposed system employs a ResNet-50 encoder for multi-scale feature extraction \cite{he2016resnet} and a boundary-aware decoder to emphasize manipulation-specific edge information. A dual-branch boundary refinement module is introduced to explicitly separate tampered boundaries from natural object edges. Furthermore, boundary-guided contrastive learning enhances feature discrimination near manipulated regions \cite{niloy2023cfl,hao2024ecnet}. The framework is implemented using the PyTorch deep learning library \cite{paszke2019pytorch}, and an image-level adaptation module is incorporated to complement pixel-level localization with global authenticity classification, improving robustness and reliability.
+
+% ========================
+% LITERATURE REVIEW
+% ========================
+\section{Literature Review}
+
+Recent deep learning-based approaches have improved image tampering detection and localization by learning manipulation-specific features. ManTra-Net introduced a self-supervised framework trained on diverse manipulation types, achieving strong generalization but lacking explicit boundary modeling for precise localization \cite{wu2019mantra}. Chen et al. proposed a multi-view multi-scale supervision strategy that improves robustness using noise and edge cues; however, natural object boundaries are frequently confused with tampered edges \cite{chen2021multi}.
+
+Contrastive learning has been explored to enhance feature discrimination in forgery localization. CFL-Net separates tampered and untampered pixel embeddings using contrastive loss, improving localization accuracy while focusing mainly on pixel-level separation \cite{niloy2023cfl}. EC-Net further incorporates edge distribution guidance with contrastive learning to emphasize boundary-level cues, but challenges remain in distinguishing tampered boundaries from natural object edges under subtle manipulations \cite{hao2024ecnet}. These limitations motivate the proposed boundary-guided framework.
+
+% ========================
+% METHODOLOGY
+% ========================
+\section{Methodology}
+The proposed methodology employs a multi-stage encoder–decoder framework that integrates preprocessing, deep feature extraction, and boundary-aware decoding to localize manipulated regions. 
+
+\subsection{Overall System Architecture}
+
+The proposed image tampering detection framework follows a multi-stage encoder--decoder architecture designed to capture both regional and boundary-level manipulation cues. The system consists of an image preprocessing module, a ResNet-50 based encoder, a boundary-aware decoder, a dual-branch boundary refinement module, a boundary-guided contrastive learning component, and an image-level adaptation module. The architecture jointly performs pixel-level tampering localization and image-level authenticity classification.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/0.jpg}
+\caption{Overall architecture of the proposed image tampering detection and localization framework.}
+\label{fig:architecture}
+\end{figure}
+% ========================
+% DETAILED DESIGN
+% ========================
+\section{Detailed Design}
+
+This section presents the detailed design of the proposed image tampering detection framework, focusing on the internal structure and functional role of each implemented module. 
+
+
+
+\subsection{Preprocessing Module}
+
+The preprocessing module resizes input images and ground-truth masks to a fixed resolution of $512 \times 512$ and applies basic data augmentation to improve generalization. Input images are normalized using ImageNet statistics, while ground-truth masks are binarized and processed using morphological operations to generate boundary supervision for boundary-guided learning.
+
+\subsection{Encoder Module}
+
+A ResNet-50 backbone pre-trained on ImageNet is employed as the encoder to extract hierarchical feature representations. The encoder produces multi-scale feature maps capturing low-level texture information, mid-level structural cues, and high-level semantic representations. These features provide rich contextual information necessary for accurate manipulation localization.
+
+\subsection{Boundary-Aware Decoder}
+
+The boundary-aware decoder progressively upsamples and refines encoder features to generate pixel-level tampering predictions. Boundary-Aware Attention Modules are integrated at multiple decoding stages to emphasize manipulation-relevant channels and spatial regions. By fusing deep semantic features with shallow spatial details, the decoder improves localization accuracy, particularly along tampered boundaries.
+
+\subsection{Dual-Branch Boundary Refinement Module}
+
+To explicitly distinguish tampered boundaries from natural object edges, a dual-branch boundary refinement module is introduced. One branch focuses on edge-sensitive boundary features, while the other captures region-level objectness information. The fusion of both branches produces a refined boundary representation, reducing false positives caused by natural edges.
+
+\subsection{Boundary-Guided Contrastive Learning}
+
+Boundary-guided contrastive learning is employed to enhance feature discrimination near manipulated regions. Positive samples are drawn from tampered pixels, while negative samples are selected from boundary-adjacent non-tampered regions. A contrastive loss encourages separation between these feature representations, leading to clearer boundary localization and improved robustness.
+
+\subsection{Image-Level Adaptation Module}
+
+In addition to pixel-level localization, an image-level adaptation module is incorporated to classify images as authentic or manipulated. Deep decoder features are aggregated using global average pooling and passed through a lightweight classification head to produce an image-level tampering probability. This auxiliary supervision strengthens high-level feature learning and complements pixel-level predictions.
+% ========================
+% IMPLEMENTATION DETAILS (20%)
+% ========================
+\section{Implementation Details}
+
+This section summarizes the partial implementation (20\%) completed so far, as presented during the project review. The current work focuses on dataset preparation, preprocessing, and initial feature extraction modules that form the foundation of the proposed system.
+
+\subsection{Dataset Description and Organization}
+
+The implementation primarily utilizes the \textbf{CASIA v2.0} dataset, which contains splicing and copy--move forgeries with corresponding pixel-level ground-truth masks. The dataset is organized in a standardized directory structure consisting of input images, binary tampering masks, and auxiliary boundary information to facilitate boundary-aware learning. Other benchmark datasets such as Columbia, Coverage, IMD2020, and DeFacto are prepared for future evaluation stages.
+
+\subsection{Dataset Loading and Preprocessing}
+
+A custom PyTorch dataset loader is implemented to handle CASIA v2.0 images and ground-truth masks. All images and masks are resized to $512 \times 512$ and normalized using ImageNet statistics. Ground-truth masks are binarized, and boundary ground truth is generated using morphological operations. Basic data augmentation, including horizontal flipping and intensity variation, is applied during training to improve generalization.
+
+
+\subsection{Feature Extraction Using ResNet-50 Backbone}
+
+A ResNet-50 backbone pre-trained on ImageNet is implemented as the encoder for feature extraction. The encoder produces hierarchical multi-scale feature maps at different spatial resolutions, capturing low-level texture information, mid-level structural patterns, and high-level semantic representations. These features form the foundation for downstream boundary-aware decoding and refinement.
+
+\subsection{Hybrid Attention Module (HAM)}
+
+The Hybrid Attention Module is implemented on top of the deepest encoder feature map to enhance manipulation-relevant information. HAM applies channel attention to emphasize informative feature channels and spatial attention to highlight salient regions associated with tampering. The resulting enhanced feature map provides stronger and more discriminative representations for subsequent decoding stages.
+
+\subsection{Boundary-Aware Decoder (Partial Implementation)}
+
+A boundary-aware decoder with multi-scale refinement is partially implemented. Boundary-Aware Attention Modules (BAMs) are integrated at different decoding stages to highlight tampered edges while progressively reconstructing the tampering mask from coarse to fine resolution. The decoder outputs intermediate tampering predictions and boundary cues, serving as the basis for further refinement modules planned in subsequent implementation phases.
+
+
+
+
+
+% ========================
+% PERFORMANCE METRICS
+% ========================
+\section{Performance Metrics}
+
+The performance of the proposed image tampering detection and localization framework is evaluated using standard pixel-level and boundary-level metrics commonly adopted in image forensics. These metrics quantitatively assess localization accuracy, boundary precision, and overall detection reliability.
+
+\subsection{Pixel-Level Metrics}
+
+\noindent\textbf{Precision} measures the proportion of correctly predicted tampered pixels among all predicted tampered pixels:
+\[
+\text{Precision} = \frac{TP}{TP + FP}
+\]
+
+\noindent\textbf{Recall} evaluates the proportion of correctly detected tampered pixels among all ground-truth tampered pixels:
+\[
+\text{Recall} = \frac{TP}{TP + FN}
+\]
+
+\noindent\textbf{F1-score} is the harmonic mean of Precision and Recall, providing a balanced measure of localization performance:
+\[
+\text{F1} = \frac{2 \times \text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+\]
+
+\noindent\textbf{Intersection over Union (IoU)} measures the overlap between the predicted tampering mask and the ground-truth mask:
+\[
+\text{IoU} = \frac{TP}{TP + FP + FN}
+\]
+
+\noindent\textbf{Pixel Accuracy} computes the ratio of correctly classified pixels to the total number of pixels.
+
+\subsection{Boundary-Level Metrics}
+
+To evaluate boundary localization quality, the \textbf{Boundary F1-score (BF-score)} is employed. This metric assesses the alignment between predicted and ground-truth tampering boundaries within a tolerance margin, emphasizing precise edge localization.
+
+\subsection{Error and Correlation Metrics}
+
+\noindent\textbf{Mean Absolute Error (MAE)} measures the average absolute difference between the predicted tampering probability map and the ground-truth mask, reflecting overall prediction error.
+
+\vspace{0.5em}
+
+\noindent\textbf{Matthews Correlation Coefficient (MCC)} evaluates the quality of binary classification by considering all elements of the confusion matrix. MCC is particularly effective for imbalanced tampering datasets.
+
+\vspace{0.5em}
+
+ Together, these metrics provide a comprehensive evaluation of the proposed framework in terms of pixel-level accuracy, boundary precision, and robustness across different manipulation scenarios.
+
+
+
+% ========================
+% CONCLUSION
+% ========================
+\section{Conclusion}
+
+This paper presented a boundary-guided deep learning framework for image tampering detection and localization. By integrating a ResNet-50 based encoder, a boundary-aware decoder, and a dual-branch boundary refinement module, the proposed system effectively reduces boundary confusion between manipulated regions and natural object edges. The incorporation of boundary-guided contrastive learning further enhances feature discrimination near tampered boundaries, leading to improved localization accuracy.
+
+\vspace{0.5em}
+
+In addition to pixel-level localization, an image-level adaptation module was introduced to provide global authenticity classification, improving the robustness and practical applicability of the framework in real-world forensic scenarios. Experimental evaluation using standard pixel-level and boundary-level metrics demonstrates the effectiveness of the proposed approach in achieving accurate tampering localization and reliable detection. Future work will focus on extending the framework to video tampering detection and improving generalization to diverse real-world manipulations.The modular design of the proposed framework allows seamless integration of additional refinement and learning components in future development stages. This flexibility makes the approach suitable for scalable deployment in practical digital forensic systems.Overall, the proposed framework establishes a strong foundation for reliable image tampering analysis by effectively combining structural and boundary-level cues. The insights gained from this work can guide the development of more robust and generalizable image forensic systems.
+
+ 
+
+
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

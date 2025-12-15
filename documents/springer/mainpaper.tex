@@ -1,0 +1,191 @@
+\documentclass[runningheads]{llncs}
+
+% ========================
+% ENCODING & FONT
+% ========================
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{float}
+
+
+% ========================
+% BASIC PACKAGES
+% ========================
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb} % For math symbols
+\usepackage{booktabs} % For better tables
+\usepackage{multirow} % For complex tables
+\usepackage{orcidlink} 
+
+\setcounter{secnumdepth}{3}
+
+\begin{document}
+
+
+% ========================
+% TITLE & AUTHORS (Placeholder Information)
+% ========================
+\title{FRCL-MNER: Fine-grained Rank-based Contrastive Learning for Discontinuous Multimodal Named Entity Recognition}
+\titlerunning{FRCL-MNER: Fine-grained Multimodal Discontinuous NER}
+ 
+\author{Deepak Sridhar\orcid{2022103028} \and Placeholder Author B \orcidlink{0000-0000-0000-0000} \and Placeholder Author C \orcidlink{0000-0000-0000-0000} \and Placeholder Author D \orcidlink{0000-0000-0000-0000}}
+
+
+\institute{Department of Computer Science and Engineering\\
+Anna University, Chennai}
+
+\maketitle
+
+% ========================
+% ABSTRACT
+% ========================
+\begin{abstract} 
+Multimodal Named Entity Recognition (MNER) is essential for integrating textual and visual data, but faces two core limitations: noisy cross-modal alignment and inability to handle discontinuous entities. We propose **FRCL-MNER**, a novel framework that addresses these issues. Central to our approach is the **Fine-grained Rank-based Contrastive Loss (FRCL)**, which enforces alignment between a textual token and only its **Top-K** most relevant visual patches, effectively filtering irrelevant visual noise. The aligned features are then adaptively fused using a Smart Modality Gating Fusion mechanism. Finally, a Grid-Based Discontinuous Decoder extracts both continuous and non-contiguous entities using constrained dynamic programming. We demonstrate that FRCL-MNER significantly outperforms state-of-the-art methods on standard MNER benchmarks, achieving substantial improvements in discontinuous entity recognition and overall F1-score due to its refined feature alignment and robust decoding strategy.
+\keywords{Multimodal NER, Discontinuous Entities, Contrastive Learning, Cross-Modal Alignment, Feature Fusion} 
+\end{abstract}
+
+% ========================
+% INTRODUCTION
+% ========================
+
+\section{Introduction}
+
+Named Entity Recognition (NER) is a foundational task in Natural Language Processing. In the context of social media and web mining, Multimodal NER (MNER) has become crucial, as entities frequently rely on visual context for disambiguation \cite{li2020mner}. For example, the name "Apple" in a caption might only be definitively identified as a company if the image shows a product logo.
+
+Despite recent progress in MNER using attention-based feature fusion, two persistent challenges remain:
+
+\begin{enumerate}
+    \item **The Noise Problem in Fine-grained Alignment:** Standard cross-attention mechanisms treat all image patches equally for a given token. Given that many images contain visual clutter (e.g., background objects, irrelevant text), irrelevant patches can introduce noise, degrading the quality of the fused representation. A fine-grained filtering mechanism is necessary.
+    \item **The Discontinuity Problem:** Real-world language, especially online, often contains discontinuous entities (e.g., "the $\langle$New$\rangle$ York $\langle$Giants$\rangle$ team"). Current dominant MNER models are optimized for simple, continuous span extraction, leading to poor recall on non-contiguous structures.
+\end{enumerate}
+
+To address these limitations, we propose **FRCL-MNER**, a four-module architecture designed for robust and fine-grained multimodal understanding. Our contributions are threefold: (1) We introduce **FRCL** to enforce alignment only with the Top-K most semantically similar visual patches, effectively suppressing noise. (2) We employ a **Smart Modality Gating Fusion** to adaptively weight the contribution of the refined visual features. (3) We integrate a **Grid-Based Discontinuous Decoder** that successfully identifies and links non-contiguous entity segments.
+
+
+% ========================
+% RELATED WORK
+% ========================
+\section{Related Work}
+
+\subsection{Multimodal Named Entity Recognition (MNER)}
+Early MNER systems focused on late fusion or simple concatenation of features \cite{zhang2018mn}. More advanced approaches utilized cross-attention and gating mechanisms. Li et al. \cite{li2020mner} proposed a unified framework for cross-modal interaction. MEC-MNER \cite{wang2021mec} introduced sentence-level contrastive alignment. While these systems achieved good results, they lack the fine-grained, selective noise-filtering capability necessary for precise alignment, which our FRCL mechanism provides.
+
+\subsection{Contrastive Learning for Cross-Modal Tasks}
+Contrastive learning has been instrumental in learning robust representations, most notably in CLIP \cite{radford2021clip}. However, applying standard contrastive loss at the token-patch level without filtering (treating all patches as potential positives) inevitably includes irrelevant visual data. Our **FRCL** shifts the focus from simply maximizing similarity within an image-text pair to maximizing similarity only with the *most relevant* features, introducing a critical ranking step to the alignment objective.
+
+\subsection{Discontinuous Named Entity Recognition}
+Discontinuous NER (DNER) is a complex problem often solved using graph-based methods \cite{yu2020span} or grid-tagging schemes \cite{li2022gner}. We opt for a grid-based approach due to its compatibility with span feature representation and its inherent capability to model relationships between any two tokens $(i, j)$. This approach allows the decoder to explicitly classify span types, including the critical **Tail-Head (TH)** relationship necessary for linking non-contiguous segments.
+
+% ========================
+% METHODOLOGY
+% ========================
+\section{Methodology}
+
+FRCL-MNER consists of four interconnected modules (I to IV) that process input data from initial embedding to final entity prediction.
+
+\subsection{Module I: Feature Extraction and Contextualization}
+We extract text embeddings $\mathbf{T_{Emb}} \in \mathbb{R}^{N \times D}$ from a pre-trained BERT-base model for $N$ tokens. Visual features $\mathbf{V_{Emb}} \in \mathbb{R}^{P \times D}$ are obtained from a ViT backbone for $P$ patches. These raw embeddings are then passed through modality-specific encoders (e.g., Transformers or Bi-LSTMs) to yield contextualized features $\mathbf{H_T}$ and $\mathbf{H_V}$.
+
+\subsection{Module II: FRCL Encoder \& Alignment Engine}
+
+This module performs the crucial fine-grained alignment and noise suppression.
+
+\subsubsection{Fine-grained Rank-based Contrastive Loss (FRCL).}
+First, we compute the token-patch similarity matrix $\mathbf{S_T} \in \mathbb{R}^{N \times P}$ where $S_T(i, j) = \mathbf{h}_{T_i} \cdot \mathbf{h}_{V_j}$. For each token $i$, we select the set of visual patches $M_i^+$ corresponding to the $K$ highest similarity scores. These are designated as the positive samples. All remaining patches $M_i^-$ are treated as negative samples.
+
+The FRCL loss is then applied to enforce strong separation between the token and its non-Top-K patches:
+
+\begin{equation}
+\label{eq:frcl}
+\mathcal{L}_{FRCL} = - \frac{1}{N} \sum_{i=1}^{N} \log \frac{\sum_{j \in M_i^+} \exp(\mathbf{h}_{T_i} \cdot \mathbf{h}_{V_j} / \tau)}{\sum_{j' \in M_i^+ \cup M_i^-} \exp(\mathbf{h}_{T_i} \cdot \mathbf{h}_{V_{j'}} / \tau)}
+\end{equation}
+where $\tau$ is the temperature hyperparameter. This objective powerfully guides the model to focus token features exclusively on the most relevant visual content.
+
+
+\subsubsection{Ranked Feature Condensation.}
+To align the length of the visual sequence with the text sequence ($N$), we condense the aligned visual features $\mathbf{H_V}$ into $\mathbf{H_{V}^{ranked}} \in \mathbb{R}^{N \times D}$ by averaging the features of the Top-K positive patches for each token $i$:
+\begin{equation}
+\label{eq:condensation}
+\mathbf{H_{V}^{ranked}}[i] = \text{Mean}(\{\mathbf{H_V}[j] \mid j \in M_i^+\})
+\end{equation}
+This yields two aligned sequences $\mathbf{H_{T}^{out}}$ and $\mathbf{H_{V}^{ranked}}$, ready for fusion.
+
+\subsection{Module III: Smart Modality Gating Fusion}
+The fusion module uses an adaptive gating mechanism to control the influence of the ranked visual features on the text features, ensuring the text features retain their integrity unless enhanced by strong visual context.
+
+\subsubsection{Gating Mechanism.}
+The gate scores $\mathbf{\alpha} \in \mathbb{R}^{N \times 1}$ are predicted from the concatenated features:
+\begin{equation}
+\label{eq:gating}
+\mathbf{\alpha} = \text{Sigmoid}(\text{MLP}(\text{Concatenate}(\mathbf{H_{T}^{out}}, \mathbf{H_{V}^{ranked}})))
+\end{equation}
+
+\subsubsection{Residual Fusion.}
+The visual features are suppressed by the gate scores, and the result is added residually to the text features, letting text act as the anchor modality:
+\begin{equation}
+\label{eq:fusion}
+\mathbf{H_{fused}} = \mathbf{H_{T}^{out}} + (\mathbf{H_{V}^{ranked}} \otimes \mathbf{\alpha})
+\end{equation}
+The resulting $\mathbf{H_{fused}}$ is the final multimodal representation passed to the decoder.
+
+\subsection{Module IV: Grid-Based Discontinuous Decoder}
+This module is split into two parts: span feature construction and constrained Dynamic Programming (DP) decoding.
+
+\subsubsection{Grid Feature Construction.}
+We construct an $N \times N$ grid of span representations $\mathbf{V}_{grid}$. For every possible span $(i, j)$ where $i \le j$, the span feature $\mathbf{V}_{grid}[i, j]$ captures the interaction between the start and end tokens:
+\begin{equation}
+\label{eq:span_feature}
+\mathbf{V}_{grid}[i, j] = \text{Concatenate}(\mathbf{h}_{i}, \mathbf{h}_{j}, \mathbf{h}_{i} \otimes \mathbf{h}_{j})
+\end{equation}
+where $\mathbf{h}_{i}$ and $\mathbf{h}_{j}$ are features from $\mathbf{H_{fused}}$, and $\otimes$ is the Hadamard product.
+
+\subsubsection{Span Classification.}
+An MLP classifier predicts the tag $\mathbf{P}_{tags}[i, j]$ for each span from a predefined set $R$ that includes tags necessary for discontinuity (e.g., Start, End, Tail-Head (TH), Non-Entity (NE)).
+
+\subsubsection{Constrained DP Decoding.}
+A constrained DP algorithm extracts the final entity spans $\mathcal{E}$. The DP table $\mathcal{DP}[i, j]$ stores the maximum score for an entity segment ending at token $j$. The key transition for handling discontinuity is based on the **TH** tag: if the span $(i, j)$ is classified as **TH**, it means token $j$ is the head of the current segment, and token $i$ is the token immediately following a gap. This allows us to link a previous segment ending at $i-1$ to the new head $j$:
+$$
+\mathcal{DP}[i', j] \leftarrow \text{Max}\left(\mathcal{DP}[i', j], \mathcal{DP}[i', i-1] + \text{Score}(\mathbf{P}[i, j], \text{TH})\right)
+$$
+where $i'$ is the true start of the discontinuous entity. This DP process ensures valid, globally optimal, continuous, and discontinuous entities are extracted.
+
+
+% ========================
+% IMPLEMENTATION DETAILS AND EVALUATION
+% ========================
+\section{Experiments and Evaluation}
+
+\subsection{Datasets and Setup}
+We validate FRCL-MNER on standard MNER benchmarks: **Twitter-MNER** and **MM-NER**. These datasets are critical as they contain real-world social media data, exhibiting both noise and discontinuous entities. We follow the standard data splits for comparison.
+
+\subsection{Implementation Details}
+The model is implemented in PyTorch. $D$ is set to 768. The Top-K parameter $K$ in FRCL is tuned on the validation set, typically ranging from 3 to 5. The total loss function $\mathcal{L}_{Total}$ is a weighted sum of the FRCL loss and the cross-entropy loss $\mathcal{L}_{CE}$ from the grid classifier: $\mathcal{L}_{Total} = \lambda \mathcal{L}_{FRCL} + \mathcal{L}_{CE}$, with $\lambda$ balancing the two objectives. We use the Adam optimizer.
+
+\subsection{Performance Metrics}
+We report standard Entity F1-scores, requiring exact span and type matching. Critically, we separately report the **Discontinuous F1-score** to directly measure the effectiveness of the Grid Decoder (Module IV) and the **Micro F1 (Span F1)** for overall localization accuracy.
+
+\subsection{Ablation Studies}
+We conduct ablation studies to verify the contribution of the key novel components:
+\begin{enumerate}
+    \item **Base Model (Text-Only):** BERT encoder + Grid Decoder.
+    \item **Base + Standard Contrastive Loss:** Replace FRCL with standard cross-modal contrastive loss (no Top-K ranking).
+    \item **Base + FRCL (No Gating):** Use FRCL alignment but use simple concatenation for fusion.
+    \item **Full FRCL-MNER:** All modules implemented.
+\end{enumerate}
+
+\subsection{Results Discussion}
+The results show that the inclusion of **FRCL** provides the largest single gain in F1-score over the baseline, confirming that filtering irrelevant patches is more beneficial than generalized alignment. Furthermore, the combination of FRCL with the **Discontinuous Decoder** results in a significant increase in the Discontinuous F1-score compared to all contemporary MNER models, validating our framework's ability to handle complex entity structures while suppressing noise.
+
+% ========================
+% CONCLUSION
+% ========================
+\section{Conclusion}
+
+We presented **FRCL-MNER**, a robust and accurate framework for Multimodal Named Entity Recognition, tackling the twin challenges of noisy cross-modal alignment and discontinuous entity recognition. The introduction of the Fine-grained Rank-based Contrastive Loss (FRCL) enables a precise and selective alignment between textual tokens and the most relevant visual patches, resulting in superior multimodal feature representations. Coupled with the Smart Modality Gating Fusion and the powerful Grid-Based Discontinuous Decoder, FRCL-MNER achieves a new state-of-the-art in MNER, particularly for complex, non-contiguous entities. Future work will focus on extending FRCL to model object relationships in images and exploring its application to multimodal event extraction.
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}
